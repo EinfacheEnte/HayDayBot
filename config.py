@@ -8,13 +8,11 @@ CONFIDENCE_THRESHOLD = 0.85   # template-match minimum score (0–1)
 # ── Timing (seconds) ─────────────────────────────────────────────────────────
 TAP_DELAY_BASE   = 0.4   # base pause after every tap
 TAP_JITTER       = 0.2   # ± random jitter added to each tap delay
-SCAN_INTERVAL    = 30    # seconds between full farm scans when no weeds found
 ACTION_TIMEOUT   = 5     # max seconds to wait for a UI element to appear
+PLANT_DELAY      = 0.8   # seconds to wait for crop selection menu to appear
 
-# ── Selling ───────────────────────────────────────────────────────────────────
-# The bot accepts whatever minimum coin price Hay Day pre-fills for weeds.
-# Set SELL_WAIT to give the listing animation time to finish.
-SELL_WAIT        = 1.5
+# ── Crop ──────────────────────────────────────────────────────────────────────
+CROP_GROW_TIME   = 120   # wheat grow time in seconds (2 minutes)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 SCREENSHOT_PATH  = "/tmp/hayday_frame.png"
