@@ -1,18 +1,16 @@
 # HayDayBot 🌾
 
-> **⚠️ Early Access** — This is a work in progress. The current version may not work as expected. A stable release is coming soon.
+> **⚠️ Disclaimer** — This project violates Hay Day's [Terms of Service](https://www.supercell.com/en/terms-of-service/). Using it may result in your account being suspended or permanently banned. This repository exists for **educational purposes only** — it demonstrates how computer vision and ADB-based game automation works. **Use at your own risk.**
 
-> **⚠️ Disclaimer** — This project violates Hay Day's [Terms of Service](https://www.supercell.com/en/terms-of-service/). Using it may result in your account being suspended or permanently banned. This repository exists for **educational and illustrative purposes only** — it demonstrates how ADB-based game automation works on Android emulators. **Use at your own risk. The author takes no responsibility for any consequences.**
-
-Automatically harvests weeds on your Hay Day farm and lists them for sale in the roadside shop.
+Automatically plants and harvests wheat on your Hay Day farm using ADB screenshots and OpenCV template matching.
 
 ## How it works
 
 1. Connects to an Android emulator via ADB
-2. Takes screenshots and uses OpenCV template matching to find weeds
-3. Taps each weed → confirms the harvest pop-up
-4. Navigates to the roadside shop and lists the weeds at the game's default minimum coin price
-5. Sleeps and repeats
+2. Takes a screenshot and uses OpenCV template matching to find ready crops or empty plots
+3. If crops are ready → clicks the field → clicks the scythe to harvest
+4. If plots are empty → clicks each plot → selects wheat from the crop menu
+5. Waits for wheat to grow (2 minutes), then repeats
 
 ---
 
@@ -22,10 +20,7 @@ Automatically harvests weeds on your Hay Day farm and lists them for sale in the
 Install **BlueStacks Air** (recommended, free, supports Apple Silicon) on your Mac and log into Hay Day.
 Download from: https://www.bluestacks.com/mac
 
-Alternative: **Android Studio AVD** (more setup, but fully official).
-
-- BlueStacks Air ADB port: `127.0.0.1:5555` (default, no changes needed)
-- Android Studio AVD port: varies — check with `adb devices` and update `ADB_PORT` in `config.py`
+- BlueStacks Air ADB port: `127.0.0.1:5555` (default)
 
 ### 2. ADB
 ```bash
@@ -34,30 +29,23 @@ brew install android-platform-tools
 
 ### 3. Python dependencies
 ```bash
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ---
 
 ## Template images (required before running)
 
-The bot matches game elements against small PNG reference crops stored in `templates/`.
-You must capture these yourself from the live emulator:
+Crop these from a live emulator screenshot (`adb exec-out screencap -p > screen.png`, open in Preview):
 
 | File | What to capture |
 |---|---|
-| `templates/weed.png` | A single weed on the farm grid |
-| `templates/harvest_btn.png` | The green "Harvest" pop-up button |
-| `templates/shop_icon.png` | The roadside shop building on screen |
-| `templates/sell_btn.png` | The empty "For Sale" slot button inside the shop |
-| `templates/price_confirm.png` | The "Post" / confirm button after setting a price |
+| `templates/ready_crop.png` | Golden wheat when it's ready to harvest |
+| `templates/harvest_icon.png` | The scythe that appears after tapping a ready field |
+| `templates/empty_plot.png` | A bare soil plot with no crop planted |
+| `templates/wheat_icon.png` | The wheat icon in the crop selection menu |
 
-### How to capture a template
-1. Take a screenshot of the emulator: `adb exec-out screencap -p > screen.png`
-2. Open `screen.png` in Preview (macOS), use the selection tool to crop the element tightly
-3. Save the crop as the filename above into the `templates/` folder
-
-> Keep templates small and tight (~50–100 px wide). Avoid including background.
+> Crop tightly (~80–150px). Templates with transparent backgrounds are supported.
 
 ---
 
@@ -67,7 +55,7 @@ You must capture these yourself from the live emulator:
 python3 bot.py
 ```
 
-Stop with `Ctrl+C`.
+When prompted, pinch out to maximum zoom in BlueStacks so the whole farm is visible. Stop with `Ctrl+C`.
 
 ---
 
@@ -78,6 +66,7 @@ Edit `config.py` to change:
 | Setting | Default | Description |
 |---|---|---|
 | `ADB_PORT` | `5555` | Emulator ADB port |
-| `CONFIDENCE_THRESHOLD` | `0.85` | Template match sensitivity (lower = more lenient) |
-| `SCAN_INTERVAL` | `30` | Seconds between scans when no weeds found |
+| `CONFIDENCE_THRESHOLD` | `0.80` | Template match sensitivity (lower = more lenient) |
+| `CROP_GROW_TIME` | `120` | Seconds to wait for wheat to grow |
 | `TAP_DELAY_BASE` | `0.4` | Base delay (seconds) after each tap |
+| `BLUESTACKS_TOOLBAR_HEIGHT` | `0` | Pixels to offset from top of BlueStacks window |
