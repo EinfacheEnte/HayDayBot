@@ -48,6 +48,8 @@ def find_one(screenshot_path: str, template_name: str) -> tuple[int, int] | None
     result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED, mask=mask)
     _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
+    print(f"[VISION] {template_name}: best score {max_val:.3f} (threshold {config.CONFIDENCE_THRESHOLD})")
+
     if max_val < config.CONFIDENCE_THRESHOLD:
         return None
 
@@ -73,8 +75,12 @@ def find_all(screenshot_path: str, template_name: str) -> list[tuple[int, int]]:
     matches = []
 
     result_copy = result.copy()
+    first = True
     while True:
         _, max_val, _, max_loc = cv2.minMaxLoc(result_copy)
+        if first:
+            print(f"[VISION] {template_name}: best score {max_val:.3f} (threshold {config.CONFIDENCE_THRESHOLD})")
+            first = False
         if max_val < config.CONFIDENCE_THRESHOLD:
             break
         cx = max_loc[0] + w // 2
@@ -93,3 +99,19 @@ def find_all(screenshot_path: str, template_name: str) -> list[tuple[int, int]]:
 def element_present(screenshot_path: str, template_name: str) -> bool:
     """Returns True if the template is visible on screen."""
     return find_one(screenshot_path, template_name) is not None
+
+
+def save_debug(screenshot_path: str, points: list[tuple[int, int]], out_path: str = "/tmp/hayday_debug.png") -> None:
+    """
+    Save a copy of the screenshot with circles drawn at each detected point.
+    Open /tmp/hayday_debug.png in Preview to see exactly what the bot sees.
+    """
+    screen = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
+    if screen is None:
+        return
+    for (x, y) in points:
+        cv2.circle(screen, (x, y), 40, (0, 0, 255), 4)     # red circle
+        cv2.line(screen, (x - 50, y), (x + 50, y), (0, 0, 255), 3)  # crosshair
+        cv2.line(screen, (x, y - 50), (x, y + 50), (0, 0, 255), 3)
+    cv2.imwrite(out_path, screen)
+    print(f"[DEBUG] Saved annotated screenshot → {out_path}")

@@ -71,7 +71,7 @@ def check_templates() -> bool:
 
 def state_scan() -> str:
     """
-    Look for ready-to-harvest crops first, then empty plots.
+    Look for ready crops or empty plots on screen.
     Returns 'harvest', 'plant', or 'wait'.
     """
     print("[SCAN] Taking screenshot...")
@@ -80,11 +80,13 @@ def state_scan() -> str:
     ready = vision.find_all(screen, "ready_crop.png")
     if ready:
         print(f"[SCAN] {len(ready)} crop(s) ready to harvest.")
+        vision.save_debug(screen, ready)
         return "harvest"
 
     empty = vision.find_all(screen, "empty_plot.png")
     if empty:
         print(f"[SCAN] {len(empty)} empty plot(s) found — time to plant.")
+        vision.save_debug(screen, empty)
         return "plant"
 
     print("[SCAN] Nothing to do right now.")
@@ -93,18 +95,8 @@ def state_scan() -> str:
 
 def state_harvest() -> str:
     """
-    Tap the harvest-all scythe icon if visible, otherwise tap crops one by one.
+    For each ready crop: tap it to open the harvest menu, then click the scythe.
     """
-    # Try the harvest-all button first (fastest)
-    scythe = wait_for("harvest_icon.png", timeout=3)
-    if scythe:
-        print(f"[HARVEST] Tapping harvest-all icon at {scythe}")
-        adb.tap(*scythe)
-        time.sleep(1.0)  # wait for animation
-        return "scan"
-
-    # Fall back to tapping each ready crop individually
-    print("[HARVEST] No harvest-all icon — tapping crops one by one.")
     attempts = 0
     last_count = None
 
@@ -127,7 +119,15 @@ def state_harvest() -> str:
         for (x, y) in crops:
             print(f"[HARVEST] Tapping crop at ({x}, {y})")
             adb.tap(x, y)
-            time.sleep(0.3)
+
+            # Wait for the harvest menu (scythe) to appear, then click it
+            scythe = wait_for("harvest_icon.png", timeout=3)
+            if scythe:
+                print(f"[HARVEST] Clicking scythe at {scythe}")
+                adb.tap(*scythe)
+                time.sleep(0.8)
+            else:
+                print("[HARVEST] Harvest menu didn't appear — skipping.")
 
     print(f"[HARVEST] Could not harvest all crops after {MAX_ATTEMPTS} attempts. Moving on.")
     return "scan"
@@ -199,6 +199,16 @@ def run() -> None:
     if not adb.connect():
         print("[BOT] Could not connect to ADB. Is the emulator running?")
         sys.exit(1)
+
+    print()
+    print("[BOT] !! ACTION REQUIRED !!")
+    print("[BOT] Switch to BlueStacks and PINCH OUT to maximum zoom on your farm.")
+    print("[BOT] Starting in 10 seconds...")
+    for i in range(10, 0, -1):
+        print(f"         {i}...", end="\r", flush=True)
+        time.sleep(1)
+    print("[BOT] Starting now!              ")
+    print()
 
     state = "scan"
     try:
