@@ -23,6 +23,7 @@ REQUIRED_TEMPLATES = [
     "empty_plot.png",    # bare unplanted field tile
     "ready_crop.png",    # sparkle/glow on a harvestable crop
     "wheat_icon.png",    # wheat in the crop selection menu
+    "harvest_icon.png",  # scythe/harvest-all button
 ]
 
 # Max stuck passes before giving up on a state
@@ -91,7 +92,19 @@ def state_scan() -> str:
 
 
 def state_harvest() -> str:
-    """Tap every ready crop on the farm."""
+    """
+    Tap the harvest-all scythe icon if visible, otherwise tap crops one by one.
+    """
+    # Try the harvest-all button first (fastest)
+    scythe = wait_for("harvest_icon.png", timeout=3)
+    if scythe:
+        print(f"[HARVEST] Tapping harvest-all icon at {scythe}")
+        adb.tap(*scythe)
+        time.sleep(1.0)  # wait for animation
+        return "scan"
+
+    # Fall back to tapping each ready crop individually
+    print("[HARVEST] No harvest-all icon — tapping crops one by one.")
     attempts = 0
     last_count = None
 
