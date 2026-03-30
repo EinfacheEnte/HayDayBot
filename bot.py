@@ -7,11 +7,24 @@ State machine:
   SCAN  →  HARVEST  →  SELL  →  WAIT  →  SCAN  → …
 """
 
+import os
 import time
 import sys
 import adb_controller as adb
 import vision
 import config
+
+# Required template files the bot needs to function
+REQUIRED_TEMPLATES = [
+    "weed.png",
+    "harvest_btn.png",
+    "shop_icon.png",
+    "sell_btn.png",
+    "price_confirm.png",
+]
+
+# Max times to attempt harvesting the same set of weeds before giving up
+MAX_HARVEST_ATTEMPTS = 5
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -32,13 +45,31 @@ def wait_for(template: str, timeout: float = config.ACTION_TIMEOUT) -> tuple[int
     return None
 
 
+def check_templates() -> bool:
+    """Verify all required template images exist. Returns False if any are missing."""
+    missing = []
+    for name in REQUIRED_TEMPLATES:
+        path = os.path.join(config.TEMPLATES_DIR, name)
+        if not os.path.isfile(path):
+            missing.append(name)
+
+    if missing:
+        print("[BOT] Missing template images:")
+        for name in missing:
+            print(f"       - templates/{name}")
+        print("[BOT] Capture these from the emulator before running.")
+        print("[BOT] See README.md for instructions.")
+        return False
+
+    return True
+
+
 # ── States ────────────────────────────────────────────────────────────────────
 
 def state_scan() -> str:
     """
     Scan the farm for weeds.
-    Returns 'harvest' if weeds found, 'sell' if inventory has weeds but none
-    on farm, or 'wait' if nothing to do.
+    Returns 'harvest' if weeds found, or 'wait' if nothing to do.
     """
     print("[SCAN] Taking screenshot...")
     weeds = vision.find_all(grab(), "weed.png")
@@ -46,28 +77,42 @@ def state_scan() -> str:
         print(f"[SCAN] Found {len(weeds)} weed(s).")
         return "harvest"
     print("[SCAN] No weeds on farm.")
-    return "sell"
+    return "wait"
 
 
 def state_harvest() -> str:
     """Tap every visible weed and confirm the harvest pop-up."""
-    while True:
+    attempts = 0
+    last_count = None
+
+    while attempts < MAX_HARVEST_ATTEMPTS:
         weeds = vision.find_all(grab(), "weed.png")
         if not weeds:
             print("[HARVEST] All weeds cleared.")
             return "sell"
 
+        # If weed count hasn't changed after a full pass, something is wrong
+        if weeds and len(weeds) == last_count:
+            attempts += 1
+            print(f"[HARVEST] Weed count unchanged ({len(weeds)}), attempt {attempts}/{MAX_HARVEST_ATTEMPTS}")
+        else:
+            attempts = 0  # progress was made, reset counter
+
+        last_count = len(weeds)
+
         for (x, y) in weeds:
             print(f"[HARVEST] Tapping weed at ({x}, {y})")
             adb.tap(x, y)
 
-            # Wait for the harvest confirmation button to appear
             btn = wait_for("harvest_btn.png")
             if btn:
                 print(f"[HARVEST] Confirming harvest at {btn}")
                 adb.tap(*btn)
             else:
                 print("[HARVEST] No harvest button appeared — skipping.")
+
+    print(f"[HARVEST] Could not clear all weeds after {MAX_HARVEST_ATTEMPTS} attempts. Moving on.")
+    return "sell"
 
 
 def state_sell() -> str:
@@ -92,7 +137,6 @@ def state_sell() -> str:
         adb.tap(*sell_btn)
         time.sleep(0.8)
 
-        # Confirm the price (accept game's default minimum)
         confirm = wait_for("price_confirm.png", timeout=3)
         if confirm:
             adb.tap(*confirm)
@@ -124,6 +168,9 @@ STATE_MAP = {
 
 
 def run() -> None:
+    if not check_templates():
+        sys.exit(1)
+
     print("[BOT] Connecting to emulator...")
     if not adb.connect():
         print("[BOT] Could not connect to ADB. Is the emulator running?")
