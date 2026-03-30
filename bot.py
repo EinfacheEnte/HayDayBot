@@ -1,10 +1,14 @@
 """
 bot.py
-Hay Day weed bot — harvests all weeds on the farm and lists them for sale
-in the roadside shop.
+Hay Day wheat bot — plants wheat in empty plots and harvests when ready.
 
 State machine:
-  SCAN  →  HARVEST  →  SELL  →  WAIT  →  SCAN  → …
+  SCAN  →  HARVEST (if crops ready)
+        →  PLANT   (if empty plots)
+        →  WAIT    (if nothing to do)
+  HARVEST  →  SCAN
+  PLANT    →  WAIT
+  WAIT     →  SCAN
 """
 
 import os
@@ -16,15 +20,13 @@ import config
 
 # Required template files the bot needs to function
 REQUIRED_TEMPLATES = [
-    "weed.png",
-    "harvest_btn.png",
-    "shop_icon.png",
-    "sell_btn.png",
-    "price_confirm.png",
+    "empty_plot.png",    # bare unplanted field tile
+    "ready_crop.png",    # sparkle/glow on a harvestable crop
+    "wheat_icon.png",    # wheat in the crop selection menu
 ]
 
-# Max times to attempt harvesting the same set of weeds before giving up
-MAX_HARVEST_ATTEMPTS = 5
+# Max stuck passes before giving up on a state
+MAX_ATTEMPTS = 5
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -68,92 +70,101 @@ def check_templates() -> bool:
 
 def state_scan() -> str:
     """
-    Scan the farm for weeds.
-    Returns 'harvest' if weeds found, or 'wait' if nothing to do.
+    Look for ready-to-harvest crops first, then empty plots.
+    Returns 'harvest', 'plant', or 'wait'.
     """
     print("[SCAN] Taking screenshot...")
-    weeds = vision.find_all(grab(), "weed.png")
-    if weeds:
-        print(f"[SCAN] Found {len(weeds)} weed(s).")
+    screen = grab()
+
+    ready = vision.find_all(screen, "ready_crop.png")
+    if ready:
+        print(f"[SCAN] {len(ready)} crop(s) ready to harvest.")
         return "harvest"
-    print("[SCAN] No weeds on farm.")
+
+    empty = vision.find_all(screen, "empty_plot.png")
+    if empty:
+        print(f"[SCAN] {len(empty)} empty plot(s) found — time to plant.")
+        return "plant"
+
+    print("[SCAN] Nothing to do right now.")
     return "wait"
 
 
 def state_harvest() -> str:
-    """Tap every visible weed and confirm the harvest pop-up."""
+    """Tap every ready crop on the farm."""
     attempts = 0
     last_count = None
 
-    while attempts < MAX_HARVEST_ATTEMPTS:
-        weeds = vision.find_all(grab(), "weed.png")
-        if not weeds:
-            print("[HARVEST] All weeds cleared.")
-            return "sell"
+    while attempts < MAX_ATTEMPTS:
+        screen = grab()
+        crops = vision.find_all(screen, "ready_crop.png")
 
-        # If weed count hasn't changed after a full pass, something is wrong
-        if weeds and len(weeds) == last_count:
+        if not crops:
+            print("[HARVEST] All crops harvested.")
+            return "scan"
+
+        if len(crops) == last_count:
             attempts += 1
-            print(f"[HARVEST] Weed count unchanged ({len(weeds)}), attempt {attempts}/{MAX_HARVEST_ATTEMPTS}")
+            print(f"[HARVEST] Count unchanged ({len(crops)}), attempt {attempts}/{MAX_ATTEMPTS}")
         else:
-            attempts = 0  # progress was made, reset counter
+            attempts = 0
 
-        last_count = len(weeds)
+        last_count = len(crops)
 
-        for (x, y) in weeds:
-            print(f"[HARVEST] Tapping weed at ({x}, {y})")
+        for (x, y) in crops:
+            print(f"[HARVEST] Tapping crop at ({x}, {y})")
             adb.tap(x, y)
+            time.sleep(0.3)
 
-            btn = wait_for("harvest_btn.png")
-            if btn:
-                print(f"[HARVEST] Confirming harvest at {btn}")
-                adb.tap(*btn)
-            else:
-                print("[HARVEST] No harvest button appeared — skipping.")
-
-    print(f"[HARVEST] Could not clear all weeds after {MAX_HARVEST_ATTEMPTS} attempts. Moving on.")
-    return "sell"
+    print(f"[HARVEST] Could not harvest all crops after {MAX_ATTEMPTS} attempts. Moving on.")
+    return "scan"
 
 
-def state_sell() -> str:
-    """Navigate to the roadside shop and list weeds for sale."""
-    print("[SELL] Navigating to roadside shop...")
-    shop = wait_for("shop_icon.png")
-    if not shop:
-        print("[SELL] Could not find shop — will retry next cycle.")
-        return "wait"
+def state_plant() -> str:
+    """
+    Tap each empty plot and select wheat from the crop menu.
+    """
+    attempts = 0
+    last_count = None
 
-    adb.tap(*shop)
-    time.sleep(1.5)  # wait for shop to open
+    while attempts < MAX_ATTEMPTS:
+        screen = grab()
+        empty_plots = vision.find_all(screen, "empty_plot.png")
 
-    # List weeds until no sell slot is available
-    listed = 0
-    while True:
-        sell_btn = wait_for("sell_btn.png", timeout=3)
-        if not sell_btn:
-            print(f"[SELL] No more sell slots. Listed {listed} item(s).")
-            break
+        if not empty_plots:
+            print("[PLANT] All plots planted.")
+            return "wait"
 
-        adb.tap(*sell_btn)
-        time.sleep(0.8)
-
-        confirm = wait_for("price_confirm.png", timeout=3)
-        if confirm:
-            adb.tap(*confirm)
-            time.sleep(config.SELL_WAIT)
-            listed += 1
+        if len(empty_plots) == last_count:
+            attempts += 1
+            print(f"[PLANT] Plot count unchanged ({len(empty_plots)}), attempt {attempts}/{MAX_ATTEMPTS}")
         else:
-            print("[SELL] Price confirm not found — backing out.")
-            adb.key_back()
-            break
+            attempts = 0
 
-    adb.key_back()  # close shop
+        last_count = len(empty_plots)
+
+        for (x, y) in empty_plots:
+            print(f"[PLANT] Tapping empty plot at ({x}, {y})")
+            adb.tap(x, y)
+            time.sleep(config.PLANT_DELAY)  # wait for crop menu
+
+            wheat = wait_for("wheat_icon.png", timeout=3)
+            if wheat:
+                print(f"[PLANT] Selecting wheat at {wheat}")
+                adb.tap(*wheat)
+                time.sleep(0.5)
+            else:
+                print("[PLANT] Crop menu didn't appear — skipping this plot.")
+                adb.key_back()
+
+    print(f"[PLANT] Could not plant all plots after {MAX_ATTEMPTS} attempts. Moving on.")
     return "wait"
 
 
 def state_wait() -> str:
-    print(f"[WAIT] Sleeping {config.SCAN_INTERVAL}s before next scan...")
-    time.sleep(config.SCAN_INTERVAL)
+    """Sleep for the wheat grow time, then scan again."""
+    print(f"[WAIT] Wheat grows in {config.CROP_GROW_TIME}s — sleeping...")
+    time.sleep(config.CROP_GROW_TIME)
     return "scan"
 
 
@@ -162,7 +173,7 @@ def state_wait() -> str:
 STATE_MAP = {
     "scan":    state_scan,
     "harvest": state_harvest,
-    "sell":    state_sell,
+    "plant":   state_plant,
     "wait":    state_wait,
 }
 
