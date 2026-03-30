@@ -4,6 +4,7 @@ Thin wrapper around ADB for screen capture and touch injection.
 """
 
 import subprocess
+import threading
 import time
 import random
 import os
@@ -67,3 +68,25 @@ def key_back() -> None:
     """Press the Android back button."""
     _run(["adb", "shell", "input", "keyevent", "4"])
     time.sleep(0.3)
+
+
+def pinch_out(cx: int = 700, cy: int = 400, spread: int = 300, duration_ms: int = 800) -> None:
+    """
+    Zoom out by spreading two fingers from the centre of the screen.
+    Runs both swipes in parallel threads so they happen simultaneously.
+    cx/cy is the centre point; spread is how far each finger travels.
+    """
+    def _swipe(x1, y1, x2, y2):
+        subprocess.run(
+            ["adb", "shell", "input", "touchscreen", "swipe",
+             str(x1), str(y1), str(x2), str(y2), str(duration_ms)],
+            capture_output=True,
+        )
+
+    t1 = threading.Thread(target=_swipe, args=(cx, cy, cx - spread, cy))
+    t2 = threading.Thread(target=_swipe, args=(cx, cy, cx + spread, cy))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+    time.sleep(0.5)

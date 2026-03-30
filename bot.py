@@ -71,9 +71,14 @@ def check_templates() -> bool:
 
 def state_scan() -> str:
     """
-    Look for ready-to-harvest crops first, then empty plots.
+    Zoom out to see the whole farm, then look for ready crops or empty plots.
     Returns 'harvest', 'plant', or 'wait'.
     """
+    print("[SCAN] Zooming out...")
+    adb.pinch_out()
+    adb.pinch_out()  # second pass to ensure max zoom
+    time.sleep(0.5)
+
     print("[SCAN] Taking screenshot...")
     screen = grab()
 
