@@ -22,9 +22,13 @@ def find_one(screenshot_path: str, template_name: str) -> tuple[int, int] | None
     Find the best single match of *template_name* in the screenshot.
     Returns (x, y) centre of the match, or None if confidence is below threshold.
     """
-    screen   = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
+    screen = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
+    if screen is None:
+        print(f"[VISION] Could not read screenshot: {screenshot_path}")
+        return None
+
     template = _load_template(template_name)
-    h, w     = template.shape[:2]
+    h, w = template.shape[:2]
 
     result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, max_loc = cv2.minMaxLoc(result)
@@ -42,11 +46,15 @@ def find_all(screenshot_path: str, template_name: str) -> list[tuple[int, int]]:
     Find ALL non-overlapping matches of *template_name* in the screenshot.
     Returns a list of (x, y) centres sorted top-left to bottom-right.
     """
-    screen   = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
-    template = _load_template(template_name)
-    h, w     = template.shape[:2]
+    screen = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
+    if screen is None:
+        print(f"[VISION] Could not read screenshot: {screenshot_path}")
+        return []
 
-    result  = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+    template = _load_template(template_name)
+    h, w = template.shape[:2]
+
+    result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
     matches = []
 
     # Suppress already-found regions with a black rectangle to avoid duplicates
